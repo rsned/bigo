@@ -2,5 +2,5 @@ github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
 github.com/rsned/bigmath v0.0.1 h1:Kb21Z5uOQ1xT15FMX5nmQ02prkH+HgGd5tiNtFMyBiY=
 github.com/rsned/bigmath v0.0.1/go.mod h1:/leJnxTOTsoCzFMSxtBV3Iueu1ZAcDdTN6YOuSiVW5E=
-github.com/rsned/stats v0.0.0-20250710210945-0d9616ecf3ae h1:KWx3sHrRV2K58qqg9IqOcKlwbrSLlTRpb9rhNcvgygw=
-github.com/rsned/stats v0.0.0-20250710210945-0d9616ecf3ae/go.mod h1:7YhoDcFhrAn4YvY/f8g7FrJ42ffKklnK5MUOWgJTwUI=
+github.com/rsned/stats v0.0.0-20250710233413-aca4fde69bab h1:jH6KO8dp7ZtOrnu5VhuBeUdNRytSBPIdU67AQG6EhbY=
+github.com/rsned/stats v0.0.0-20250710233413-aca4fde69bab/go.mod h1:7YhoDcFhrAn4YvY/f8g7FrJ42ffKklnK5MUOWgJTwUI=
