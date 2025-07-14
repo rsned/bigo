@@ -27,23 +27,24 @@ The `bigo` package analyzes timing measurements collected from algorithms and be
 
 ```go
     // Create a new Classifier analyzer
-    b := &bigo.Classifier{}
+    c := bigo.NewClassifier()
     
     // Add timing data points (input_size, execution_time_in_ns)
-    b.AddDataPoint(100, 1250.5)
-    b.AddDataPoint(200, 2501.2) 
-    b.AddDataPoint(400, 5002.8)
-    b.AddDataPoint(800, 10008.1)
+    // Note: Non-positive input sizes (n <= 0) are automatically filtered out
+    c.AddDataPoint(100, 1250.5)
+    c.AddDataPoint(200, 2501.2) 
+    c.AddDataPoint(400, 5002.8)
+    c.AddDataPoint(800, 10008.1)
     
-    // Characterize the complexity
-    rank, err := b.Characterize()
+    // Classify the complexity
+    result, err := c.Classify()
     if err != nil {
         panic(err)
     }
     
-    fmt.Printf("Best fit: %s\n", rank)
+    fmt.Printf("Best fit: %s\n", result)
     // Also print out the verbose summary.
-    fmt.Print(b.Summary())
+    fmt.Print(c.Summary())
 }
 ```
 
@@ -51,24 +52,24 @@ The `bigo` package analyzes timing measurements collected from algorithms and be
 
 If your data comes from an external source, **LoadCSV** is a good starting point. It expects data in a two column delimited format. Rows do not need to be unique. Each row is considered a distinct measurement, and all measurements for a given N are averaged together before the characterization is performed.  The method takes a filename, a boolean flag indicating if there is a header row in the file, and the delimiter character used in the file.  The columns are expected to be:
 
-*   Column 1 - A numerical value representing a given N.
+*   Column 1 - A numerical value representing a given N. **Non-positive values (N ≤ 0) are automatically filtered out during loading.**
 *   Column 2 - A numerical measurement value associated with column 1's N.
 
 Extra columns are ignored.
 
 ```go
 // Load timing data from CSV file
-b := &bigo.Classifier{}
-if err := b.LoadCSV("timings.csv", true, ','); err != nil {
+c := bigo.NewClassifier()
+if err := c.LoadCSV("timings.csv", true, ','); err != nil {
     panic(err)
 }
 
-rank, err := b.Characterize()
+result, err := c.Classify()
 if err != nil {
     panic(err)
 }
 
-fmt.Printf("BigO: %s\n", rank)
+fmt.Printf("BigO: %s\n", result)
 ```
 
 LoadCSV can be called multiple times to add more data.  Data is not cleared between calls to LoadCSV.
@@ -78,12 +79,18 @@ LoadCSV can be called multiple times to add more data.  Data is not cleared betw
 
 Sometimes there are multiple runs for a given size of input. The AddDataPoint method is variadic and can take multiple measurement values for the given size. Similarly, there is a helper method AddDataPoints which takes slices of sizes and corresponding slices of slices of measurements paired up with those sizes.
 
+**Note:** All data point addition methods automatically filter out non-positive input sizes (N ≤ 0) to ensure valid complexity analysis.
+
 ```go
 // Add multiple measurements for each input size
-b := &bigo.Classifier{}
+c := bigo.NewClassifier()
 
 // Multiple runs for n=100
-b.AddDataPoint(100, 1250.5, 1248.2, 1252.1)
+c.AddDataPoint(100, 1250.5, 1248.2, 1252.1)
+
+// Invalid input sizes are silently filtered out
+c.AddDataPoint(0, 0.0)    // Ignored - zero input size
+c.AddDataPoint(-5, 10.0)  // Ignored - negative input size
 
 // Batch add data points
 inputSizes := []int{100, 200, 400, 800}
@@ -95,7 +102,7 @@ timings := [][]float64{
 }
 
 // AddDataPoints can error for things like the the two slices aren't the same length.
-err := b.AddDataPoints(inputSizes, timings)
+err := c.AddDataPoints(inputSizes, timings)
 if err != nil {
     panic(err)
 }
@@ -253,9 +260,13 @@ Although unlikely, for algorithms with extreme, extreme performance characterist
 
 ```go
 // Add high-precision timing data
-b := &bigo.Classifier{}
+c := bigo.NewClassifier()
 bigTime := big.NewFloat(1.23456789012345e15) 
-b.AddDataPointBig(1000000, bigTime)
+c.AddDataPointBig(1000000, bigTime)
+
+// Non-positive input sizes are also filtered for big precision methods
+c.AddDataPointBig(0, big.NewFloat(100.0))    // Ignored - zero input size
+c.AddDataPointBig(-10, big.NewFloat(50.0))   // Ignored - negative input size
 
 // Batch add big float data
 bigTimings := [][]*big.Float{
@@ -263,7 +274,46 @@ bigTimings := [][]*big.Float{
     {big.NewFloat(3.2e12)},
 }
 
-err := b.AddDataPointsBig(inputSizes, bigTimings)
+err := c.AddDataPointsBig(inputSizes, bigTimings)
 ```
 
 Generally the high-precision value support is used internally for Big O complexity classes greater than Linear where the chance of generating a comparison value that overflows a float64 becomes likely.  For example, any value of N > 170 for factorial will exceed a float64's limit, but it's possible a data set matching a lower Big O will have N values running into the thousands or millions that we are hoping to compare to. Even algorithms in Linear time are likely to be able to generate results with a million or more inputs on moderated hardware in reasonable time.
+
+## Input Validation and Data Filtering
+
+The library automatically filters invalid input data to ensure robust complexity analysis:
+
+### Non-Positive Input Sizes
+- **Input sizes (N ≤ 0) are automatically filtered out** across all data addition methods
+- This includes `AddDataPoint()`, `AddDataPointBig()`, `AddDataPoints()`, `AddDataPointsBig()`, and `LoadCSV()`
+- Filtering is silent - no errors are returned for filtered data points
+- If insufficient valid data points remain after filtering (< 3), an error is returned during classification
+
+### Example of Filtering Behavior
+```go
+c := bigo.NewClassifier()
+
+// These will be added successfully
+c.AddDataPoint(100, 1250.5)
+c.AddDataPoint(200, 2501.2)
+c.AddDataPoint(400, 5002.8)
+
+// These will be silently filtered out
+c.AddDataPoint(0, 100.0)     // Zero input size - ignored
+c.AddDataPoint(-5, 50.0)     // Negative input size - ignored
+c.AddDataPoint(-100, 75.0)   // Negative input size - ignored
+
+// Classification will succeed with 3 valid data points
+result, err := c.Classify()  // Works with 3 valid points
+```
+
+### Why This Filtering Is Important
+- **Algorithm complexity analysis** requires positive input sizes to be meaningful
+- **Mathematical functions** used for complexity correlation (log, exponential, factorial) are undefined or problematic for non-positive inputs
+- **Prevents runtime panics** from mathematical operations on invalid inputs
+- **Ensures robust operation** when loading real-world data that may contain edge cases
+
+### Data Requirements After Filtering
+- **Minimum 3 data points** are required after filtering for complexity analysis
+- **Timing values** can be negative (for measuring performance deltas) but input sizes cannot
+- **Zero timing values** are allowed and handled appropriately

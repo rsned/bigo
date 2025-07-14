@@ -15,7 +15,7 @@
 /*
 Package bigo is a library to generate Big O estimates for real world timings of
 algorithms and code. Given a collection of counts and timings collected
-when running code or benchmarks, the library will attempt to characterize
+when running code or benchmarks, the library will attempt to Classify
 which Big O notations most likely match the values.
 
 The library has support for the following Big O classifications:

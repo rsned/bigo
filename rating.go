@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//       http://www.apache.org/licenses/LICENSE-2.0
+//    http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an AS IS BASIS,
@@ -12,9 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/*
-Package examples contains a collection of example algorithms and methods and the
-Big O complexity they are generally associated with. These examples are used to
-generate the timing data used by some of the Big O unit tests and analysis tool.
-*/
-package examples
+package bigo
+
+import "fmt"
+
+// Rating pairs up a BigO and the score it received in the current processing.
+type Rating struct {
+	bigO  *BigO
+	score float64
+}
+
+func (r *Rating) String() string {
+	// TODO(rsned): Figure out how many significant digits are useful.
+	return fmt.Sprintf("%s: %0.3f", r.bigO.label, r.score)
+}
+
+// defaultRating is used when nothing has been processed yet.
+var defaultRating = &Rating{
+	bigO:  defaultBigO,
+	score: 0,
+}
