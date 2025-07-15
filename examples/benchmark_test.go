@@ -207,7 +207,7 @@ var (
 		"BasicMathAdd": {
 			ExpectedBigO: bigo.Constant,
 			Sorted:       false,
-			Runner:       func(n int, vals []int) { _ = constant.Add(vals[0], vals[1]) },
+			Runner:       func(_ int, vals []int) { _ = constant.Add(vals[0], vals[1]) },
 			Start:        100000,
 			End:          1000000,
 			Step:         100000,
@@ -217,7 +217,7 @@ var (
 		"BasicMathSubtract": {
 			ExpectedBigO: bigo.Constant,
 			Sorted:       false,
-			Runner:       func(n int, vals []int) { _ = constant.Subtract(vals[0], vals[1]) },
+			Runner:       func(_ int, vals []int) { _ = constant.Subtract(vals[0], vals[1]) },
 			Start:        100000,
 			End:          1000000,
 			Step:         100000,
@@ -227,7 +227,7 @@ var (
 		"BasicMathMultiply": {
 			ExpectedBigO: bigo.Constant,
 			Sorted:       false,
-			Runner:       func(n int, vals []int) { _ = constant.Multiply(vals[0], vals[1]) },
+			Runner:       func(_ int, vals []int) { _ = constant.Multiply(vals[0], vals[1]) },
 			Start:        100000,
 			End:          1000000,
 			Step:         100000,
@@ -237,7 +237,7 @@ var (
 		"BasicMathDivide": {
 			ExpectedBigO: bigo.Constant,
 			Sorted:       false,
-			Runner:       func(n int, vals []int) { _ = constant.Divide(vals[0], vals[1]) },
+			Runner:       func(_ int, vals []int) { _ = constant.Divide(vals[0], vals[1]) },
 			Start:        100000,
 			End:          1000000,
 			Step:         100000,
