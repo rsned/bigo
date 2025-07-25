@@ -17,8 +17,10 @@ package bigo
 import (
 	"math/big"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -759,5 +761,693 @@ func TestClassifierNegativeIntegerHandlingBig(t *testing.T) {
 				t.Errorf("Expected %d data points, got %d", tt.expectedPoints, len(classifier.dataBig))
 			}
 		})
+	}
+}
+
+func TestAddBenchmarkResult(t *testing.T) {
+	tests := []struct {
+		name           string
+		benchResult    testing.BenchmarkResult
+		expectedN      int
+		expectedValue  float64
+		expectedPoints int
+		wantErr        bool
+	}{
+		{
+			name: "valid benchmark result",
+			benchResult: testing.BenchmarkResult{
+				N: 1000,
+				T: 5000 * time.Nanosecond, // 5000ns total, so 5ns per op
+			},
+			expectedN:      1000,
+			expectedValue:  5.0,
+			expectedPoints: 1,
+			wantErr:        false,
+		},
+		{
+			name: "benchmark with zero iterations",
+			benchResult: testing.BenchmarkResult{
+				N: 0,
+				T: 1000 * time.Nanosecond,
+			},
+			expectedN:      0,
+			expectedValue:  0,
+			expectedPoints: 0, // Should be filtered out due to non-positive N
+			wantErr:        false,
+		},
+		{
+			name: "benchmark with negative iterations",
+			benchResult: testing.BenchmarkResult{
+				N: -100,
+				T: 1000 * time.Nanosecond,
+			},
+			expectedN:      -100,
+			expectedValue:  0,
+			expectedPoints: 0, // Should be filtered out due to negative N
+			wantErr:        false,
+		},
+		{
+			name: "benchmark with very fast operation",
+			benchResult: testing.BenchmarkResult{
+				N: 1000000,
+				T: 1 * time.Nanosecond, // 1ns total, so 0.000001ns per op
+			},
+			expectedN:      1000000,
+			expectedValue:  0.000001,
+			expectedPoints: 1,
+			wantErr:        false,
+		},
+		{
+			name: "benchmark with slow operation",
+			benchResult: testing.BenchmarkResult{
+				N: 10,
+				T: 10 * time.Second, // Very slow: 1 billion ns per op
+			},
+			expectedN:      10,
+			expectedValue:  1000000000.0,
+			expectedPoints: 1,
+			wantErr:        false,
+		},
+		{
+			name: "benchmark with memory allocations (ignored)",
+			benchResult: testing.BenchmarkResult{
+				N:         500,
+				T:         2500 * time.Nanosecond, // 5ns per op
+				MemAllocs: 1000,                   // Should be ignored
+				MemBytes:  50000,                  // Should be ignored
+			},
+			expectedN:      500,
+			expectedValue:  5.0,
+			expectedPoints: 1,
+			wantErr:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			classifier := NewClassifier()
+
+			err := classifier.AddBenchmarkResult(tt.benchResult)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			// Check that the correct number of data points were added
+			if len(classifier.data) != tt.expectedPoints {
+				t.Errorf("expected %d data points, got %d", tt.expectedPoints, len(classifier.data))
+				return
+			}
+
+			// If we expect data points, verify the values
+			if tt.expectedPoints > 0 {
+				values, exists := classifier.data[tt.expectedN]
+				if !exists {
+					t.Errorf("expected data point with N=%d not found", tt.expectedN)
+					return
+				}
+
+				if len(values) != 1 {
+					t.Errorf("expected 1 value for N=%d, got %d", tt.expectedN, len(values))
+					return
+				}
+
+				if values[0] != tt.expectedValue {
+					t.Errorf("expected value %f for N=%d, got %f", tt.expectedValue, tt.expectedN, values[0])
+				}
+			}
+		})
+	}
+}
+
+func TestClassifierAddBenchmarkResultMultipleResults(t *testing.T) {
+	classifier := NewClassifier()
+
+	// Add multiple benchmark results with slight variation to avoid zero variance
+	results := []testing.BenchmarkResult{
+		{N: 100, T: 500 * time.Nanosecond},   // 5.0ns per op
+		{N: 200, T: 1020 * time.Nanosecond},  // 5.1ns per op
+		{N: 400, T: 1960 * time.Nanosecond},  // 4.9ns per op
+		{N: 800, T: 4040 * time.Nanosecond},  // 5.05ns per op
+		{N: 1600, T: 7920 * time.Nanosecond}, // 4.95ns per op
+	}
+
+	for _, result := range results {
+		err := classifier.AddBenchmarkResult(result)
+		if err != nil {
+			t.Errorf("unexpected error adding benchmark result: %v", err)
+			return
+		}
+	}
+
+	// Verify all data points were added
+	if len(classifier.data) != 5 {
+		t.Errorf("expected 5 data points, got %d", len(classifier.data))
+		return
+	}
+
+	// Verify the data represents roughly constant time complexity
+	expectedData := map[int][]float64{
+		100:  {5.0},
+		200:  {5.1},
+		400:  {4.9},
+		800:  {5.05},
+		1600: {4.95},
+	}
+
+	for n, expectedValues := range expectedData {
+		actualValues, exists := classifier.data[n]
+		if !exists {
+			t.Errorf("expected data point with N=%d not found", n)
+			continue
+		}
+
+		if !cmp.Equal(actualValues, expectedValues) {
+			t.Errorf("data for N=%d: got %v, want %v", n, actualValues, expectedValues)
+		}
+	}
+
+	// Test that we can classify this as constant time
+	rating, err := classifier.Classify()
+	if err != nil {
+		t.Errorf("classification failed: %v", err)
+		return
+	}
+
+	if rating.bigO != Constant {
+		t.Errorf("expected Constant classification, got %s", rating.bigO.label)
+	}
+}
+
+func TestClassifierAddBenchmarkResultIntegrationWithRealBenchmark(t *testing.T) {
+	classifier := NewClassifier()
+
+	// Create a linear-time function that actually scales with input size
+	linearFunc := func(arr []int) int {
+		sum := 0
+		for _, v := range arr {
+			sum += v
+		}
+		return sum
+	}
+
+	// Create arrays of different sizes
+	problemSizes := []int{100, 200, 400, 800, 1600}
+
+	for _, size := range problemSizes {
+		// Create test data of the specified size
+		testData := make([]int, size)
+		for i := range testData {
+			testData[i] = i + 1
+		}
+
+		// Run a benchmark that processes the full array each time
+		result := testing.Benchmark(func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = linearFunc(testData)
+			}
+		})
+
+		// Create a fake benchmark result with the size as N for our test
+		// In real usage, you'd run the benchmark with different problem sizes
+		// and collect the results appropriately
+		fakeResult := testing.BenchmarkResult{
+			N: size,     // Use problem size as N
+			T: result.T, // Use actual timing
+		}
+
+		// Add the benchmark result to our classifier
+		err := classifier.AddBenchmarkResult(fakeResult)
+		if err != nil {
+			t.Errorf("failed to add benchmark result for size %d: %v", size, err)
+			continue
+		}
+	}
+
+	// Verify we collected data
+	if len(classifier.data) != len(problemSizes) {
+		t.Errorf("expected %d data points, got %d", len(problemSizes), len(classifier.data))
+	}
+
+	// The classification might vary due to benchmark timing variability,
+	// but we should be able to classify it without error
+	rating, err := classifier.Classify()
+	if err != nil {
+		t.Errorf("classification failed: %v", err)
+		return
+	}
+
+	if rating == nil {
+		t.Errorf("got nil rating")
+		return
+	}
+
+	// Verify the classifier was marked as classified
+	if !classifier.classified {
+		t.Errorf("classifier not marked as classified")
+	}
+}
+
+func TestAddBenchmarkResult_ZeroDurationHandling(t *testing.T) {
+	classifier := NewClassifier()
+
+	// Test with zero duration (could happen with very fast operations)
+	result := testing.BenchmarkResult{
+		N: 1000,
+		T: 0, // Zero duration
+	}
+
+	err := classifier.AddBenchmarkResult(result)
+	if err != nil {
+		t.Errorf("unexpected error with zero duration: %v", err)
+		return
+	}
+
+	// Should add data point with 0.0 ns per operation
+	values, exists := classifier.data[1000]
+	if !exists {
+		t.Errorf("expected data point not found")
+		return
+	}
+
+	if len(values) != 1 || values[0] != 0.0 {
+		t.Errorf("expected [0.0], got %v", values)
+	}
+}
+
+func TestClassifierGetAllRatings(t *testing.T) {
+	tests := []struct {
+		name             string
+		setupData        func(*Classifier) error
+		expectNil        bool
+		expectNumRatings int
+		expectSorted     bool
+	}{
+		{
+			name: "not classified yet",
+			setupData: func(c *Classifier) error {
+				_ = c.AddDataPoint(100, 100.0)
+				_ = c.AddDataPoint(200, 200.0)
+				_ = c.AddDataPoint(400, 400.0)
+				// Don't call Classify()
+				return nil
+			},
+			expectNil:        true,
+			expectNumRatings: 0,
+			expectSorted:     false,
+		},
+		{
+			name: "after classification - linear pattern",
+			setupData: func(c *Classifier) error {
+				_ = c.AddDataPoint(100, 100.0)
+				_ = c.AddDataPoint(200, 200.0)
+				_ = c.AddDataPoint(400, 400.0)
+				_ = c.AddDataPoint(800, 800.0)
+				_ = c.AddDataPoint(1600, 1600.0)
+				_, err := c.Classify()
+				return err
+			},
+			expectNil:        false,
+			expectNumRatings: 11, // Some BigO types get filtered out due to scaling cutoffs
+			expectSorted:     true,
+		},
+		{
+			name: "after classification - constant pattern",
+			setupData: func(c *Classifier) error {
+				_ = c.AddDataPoint(100, 1.0)
+				_ = c.AddDataPoint(200, 1.1)
+				_ = c.AddDataPoint(400, 0.9)
+				_ = c.AddDataPoint(800, 1.0)
+				_ = c.AddDataPoint(1600, 1.2)
+				_, err := c.Classify()
+				return err
+			},
+			expectNil:        false,
+			expectNumRatings: 11, // Some BigO types get filtered out due to scaling cutoffs
+			expectSorted:     true,
+		},
+		{
+			name: "after classification - quadratic pattern",
+			setupData: func(c *Classifier) error {
+				_ = c.AddDataPoint(10, 100.0)
+				_ = c.AddDataPoint(20, 400.0)
+				_ = c.AddDataPoint(30, 900.0)
+				_ = c.AddDataPoint(40, 1600.0)
+				_ = c.AddDataPoint(50, 2500.0)
+				_, err := c.Classify()
+				return err
+			},
+			expectNil:        false,
+			expectNumRatings: 13, // All BigO types should be available for small input sizes
+			expectSorted:     true,
+		},
+		{
+			name: "re-classification replaces ratings (fixed behavior)",
+			setupData: func(c *Classifier) error {
+				// First classification with limited data
+				_ = c.AddDataPoint(100, 100.0)
+				_ = c.AddDataPoint(200, 200.0)
+				_ = c.AddDataPoint(400, 400.0)
+				_, err := c.Classify()
+				if err != nil {
+					return err
+				}
+
+				// Add more data and re-classify
+				_ = c.AddDataPoint(800, 800.0)
+				_ = c.AddDataPoint(1600, 1600.0)
+				_, err = c.Classify()
+				return err
+			},
+			expectNil:        false,
+			expectNumRatings: 11, // Should have fresh ratings (not appended), some filtered due to scaling cutoffs
+			expectSorted:     true,
+		},
+		{
+			name: "large input sizes filter some BigO types",
+			setupData: func(c *Classifier) error {
+				// Use large N values that would exceed scaling cutoff for some BigO types
+				_ = c.AddDataPoint(1000, 1000.0)
+				_ = c.AddDataPoint(2000, 2000.0)
+				_ = c.AddDataPoint(4000, 4000.0)
+				_ = c.AddDataPoint(8000, 8000.0)
+				_ = c.AddDataPoint(16000, 16000.0)
+				_, err := c.Classify()
+				return err
+			},
+			expectNil:        false,
+			expectNumRatings: -1, // Variable number due to scaling cutoffs
+			expectSorted:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewClassifier()
+
+			err := tt.setupData(c)
+			if err != nil {
+				t.Errorf("failed to setup test data: %v", err)
+				return
+			}
+
+			ratings := c.GetAllRatings()
+
+			if tt.expectNil {
+				if ratings != nil {
+					t.Errorf("expected nil ratings but got %d ratings", len(ratings))
+				}
+				return
+			}
+
+			if ratings == nil {
+				t.Errorf("expected ratings but got nil")
+				return
+			}
+
+			if tt.expectNumRatings >= 0 && len(ratings) != tt.expectNumRatings {
+				t.Errorf("expected %d ratings, got %d", tt.expectNumRatings, len(ratings))
+			}
+
+			if len(ratings) == 0 {
+				t.Errorf("expected at least some ratings but got empty slice")
+				return
+			}
+
+			// Verify that all ratings have valid BigO types and scores
+			for i, rating := range ratings {
+				if rating == nil {
+					t.Errorf("rating %d is nil", i)
+					continue
+				}
+				if rating.bigO == nil {
+					t.Errorf("rating %d has nil BigO", i)
+				}
+				// Score can be negative for poor fits, so no validation on score value
+			}
+
+			// Verify ratings are sorted by BigO rank if expected
+			if tt.expectSorted && len(ratings) > 1 {
+				for i := 1; i < len(ratings); i++ {
+					if ratings[i-1].bigO.rank > ratings[i].bigO.rank {
+						t.Errorf("ratings not sorted by rank: rating %d (%s, rank %d) > rating %d (%s, rank %d)",
+							i-1, ratings[i-1].bigO.label, ratings[i-1].bigO.rank,
+							i, ratings[i].bigO.label, ratings[i].bigO.rank)
+						break
+					}
+				}
+			}
+
+			// Verify that the ratings slice is a copy and safe to modify
+			// The returned slice should NOT affect internal state when modified
+			originalLen := len(ratings)
+			if originalLen > 0 {
+				// Save original value for comparison
+				originalFirstRating := ratings[0]
+				// Modify the returned slice
+				ratings[0] = nil
+				// Get ratings again and verify it was NOT affected (fixed behavior)
+				newRatings := c.GetAllRatings()
+				if newRatings[0] == nil {
+					t.Errorf("modifying returned ratings slice affected internal state - should return a copy")
+				}
+				if newRatings[0] != originalFirstRating {
+					t.Errorf("expected internal state to be unchanged after modifying returned slice")
+				}
+			}
+		})
+	}
+}
+
+func TestClassifierGetAllRatingsConsistencyWithClassify(t *testing.T) {
+	// Test that GetAllRatings returns consistent data with what Classify() produces
+	c := NewClassifier()
+
+	// Add linear pattern data
+	_ = c.AddDataPoint(100, 100.0)
+	_ = c.AddDataPoint(200, 200.0)
+	_ = c.AddDataPoint(400, 400.0)
+	_ = c.AddDataPoint(800, 800.0)
+	_ = c.AddDataPoint(1600, 1600.0)
+
+	topRating, err := c.Classify()
+	if err != nil {
+		t.Errorf("classification failed: %v", err)
+		return
+	}
+
+	allRatings := c.GetAllRatings()
+	if allRatings == nil {
+		t.Errorf("GetAllRatings returned nil after successful classification")
+		return
+	}
+
+	// Verify the top rating from Classify() appears in the all ratings
+	foundTopRating := false
+	for _, rating := range allRatings {
+		if rating.bigO == topRating.bigO && rating.score == topRating.score {
+			foundTopRating = true
+			break
+		}
+	}
+
+	if !foundTopRating {
+		t.Errorf("top rating from Classify() not found in GetAllRatings() results")
+	}
+
+	// Verify that ratings are ordered consistently
+	// The best score should be among the ratings (though not necessarily first due to rank sorting)
+	bestScore := topRating.score
+	foundBestScore := false
+	for _, rating := range allRatings {
+		if rating.score == bestScore {
+			foundBestScore = true
+			break
+		}
+	}
+
+	if !foundBestScore {
+		t.Errorf("best score %.8f not found in ratings", bestScore)
+	}
+}
+
+func TestClassifierGetAllRatingsEmptyAfterReset(t *testing.T) {
+	// Test behavior when classifier state is reset
+	c := NewClassifier()
+
+	// Add data and classify
+	_ = c.AddDataPoint(100, 100.0)
+	_ = c.AddDataPoint(200, 200.0)
+	_ = c.AddDataPoint(400, 400.0)
+	_ = c.AddDataPoint(800, 800.0)
+	_ = c.AddDataPoint(1600, 1600.0)
+
+	_, err := c.Classify()
+	if err != nil {
+		t.Errorf("classification failed: %v", err)
+		return
+	}
+
+	// Verify we have ratings
+	ratingsBeforeReset := c.GetAllRatings()
+	if len(ratingsBeforeReset) == 0 {
+		t.Errorf("expected ratings before reset")
+		return
+	}
+
+	// Create a new classifier (simulating reset)
+	c2 := NewClassifier()
+	ratingsAfterReset := c2.GetAllRatings()
+
+	if ratingsAfterReset != nil {
+		t.Errorf("expected nil ratings from new classifier, got %d ratings", len(ratingsAfterReset))
+	}
+}
+
+func TestClassifierGetAllRatingsReturnsCopy(t *testing.T) {
+	// Test that GetAllRatings returns a copy that can be safely modified
+	c := NewClassifier()
+
+	// Add data and classify
+	_ = c.AddDataPoint(100, 100.0)
+	_ = c.AddDataPoint(200, 200.0)
+	_ = c.AddDataPoint(400, 400.0)
+	_ = c.AddDataPoint(800, 800.0)
+	_ = c.AddDataPoint(1600, 1600.0)
+
+	_, err := c.Classify()
+	if err != nil {
+		t.Errorf("classification failed: %v", err)
+		return
+	}
+
+	// Get ratings twice
+	ratings1 := c.GetAllRatings()
+	ratings2 := c.GetAllRatings()
+
+	if len(ratings1) == 0 || len(ratings2) == 0 {
+		t.Errorf("expected ratings from both calls")
+		return
+	}
+
+	// Verify they are different slice instances (different addresses)
+	if &ratings1[0] == &ratings2[0] {
+		t.Errorf("expected different slice instances, got same slice reference")
+	}
+
+	// Save original values
+	originalFirst1 := ratings1[0]
+	originalFirst2 := ratings2[0]
+
+	// Modify first slice
+	ratings1[0] = nil
+
+	// Verify second slice is unaffected
+	if ratings2[0] == nil {
+		t.Errorf("modifying first returned slice affected second returned slice")
+	}
+
+	// Get fresh ratings and verify internal state is unaffected
+	ratings3 := c.GetAllRatings()
+	if ratings3[0] == nil {
+		t.Errorf("modifying returned slice affected internal state")
+	}
+
+	// Verify values are consistent
+	if ratings3[0] != originalFirst1 || ratings3[0] != originalFirst2 {
+		t.Errorf("internal state changed unexpectedly")
+	}
+
+	// Verify we can modify the returned slice extensively without issues
+	for i := range ratings1 {
+		ratings1[i] = nil
+	}
+
+	// Internal state should still be intact
+	ratings4 := c.GetAllRatings()
+	if len(ratings4) != len(ratings2) {
+		t.Errorf("extensive modification of returned slice affected internal state length")
+	}
+
+	for i, rating := range ratings4 {
+		if rating == nil {
+			t.Errorf("internal state corrupted at index %d after extensive modification of returned slice", i)
+		}
+	}
+}
+
+func TestClassifierGetAllRatingsReClassificationReplacesRatings(t *testing.T) {
+	// Test that re-classification replaces ratings instead of appending
+	c := NewClassifier()
+
+	// First classification with limited data
+	_ = c.AddDataPoint(100, 100.0)
+	_ = c.AddDataPoint(200, 200.0)
+	_ = c.AddDataPoint(400, 400.0)
+
+	_, err := c.Classify()
+	if err != nil {
+		t.Errorf("first classification failed: %v", err)
+		return
+	}
+
+	ratingsAfterFirst := c.GetAllRatings()
+	firstCount := len(ratingsAfterFirst)
+	if firstCount == 0 {
+		t.Errorf("expected ratings after first classification")
+		return
+	}
+
+	// Add more data and re-classify
+	_ = c.AddDataPoint(800, 800.0)
+	_ = c.AddDataPoint(1600, 1600.0)
+
+	_, err = c.Classify()
+	if err != nil {
+		t.Errorf("second classification failed: %v", err)
+		return
+	}
+
+	ratingsAfterSecond := c.GetAllRatings()
+	secondCount := len(ratingsAfterSecond)
+
+	// The key test: ratings should be replaced, not appended
+	// Both classifications should have similar counts (with possible filtering
+	// differences) but definitely NOT double the count.
+	if secondCount >= firstCount*2 {
+		t.Errorf("ratings appear to be appended instead of replaced: first=%d, second=%d",
+			firstCount, secondCount)
+	}
+
+	// Verify that ratings are fresh (not containing duplicates from first
+	// classification). We can check this by ensuring no duplicate BigO
+	// types exist.
+	seenBigO := make(map[string]bool)
+	for _, rating := range ratingsAfterSecond {
+		if seenBigO[rating.bigO.label] {
+			t.Errorf("found duplicate BigO type %s, indicating ratings were appended instead of replaced",
+				rating.bigO.label)
+		}
+		seenBigO[rating.bigO.label] = true
+	}
+
+	// Additional verification: the count should be reasonable
+	// (similar to single classification)
+
+	// Allow for some filtering variations
+	expectedRange := []int{10, 11, 12, 13}
+	countInRange := slices.Contains(expectedRange, secondCount)
+
+	if !countInRange {
+		t.Errorf("rating count %d after re-classification seems unreasonable, expected one of %v",
+			secondCount, expectedRange)
 	}
 }
