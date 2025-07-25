@@ -208,11 +208,11 @@ n,ns_per_op
 
 To run just a specific complexity classes example method benchmarks use **--complexity**.
 
-Accepted case insensitive options are: Constant, LogLog, Logarithmic, Linear, Linearithmic, Quadratic, Cubic, Exponential, Polynomial, Factorial
+Accepted case insensitive options are: Constant, LogLog, Logarithmic, Polylogarithmic, Linear, NLogStarN, Linearithmic, Quadratic, Cubic, Exponential, Polynomial, Factorial, HyperExponential
 
 Some alternative spelling/forms are also accepted (e.g., nlogn for Linearithmic)
 
-_Note: This is not a repeated value flag, only one class at a time._
+_Note: This is not a repeated value flag, only one complexity class is run at a time._
 
 ```bash
 # Run specific complexity class only
@@ -221,7 +221,7 @@ _Note: This is not a repeated value flag, only one class at a time._
 ```
 
 #### run_benchmark.sh
-Runs individual benchmarks or example methods with configurable parameters and generates CSV output:
+Runs individual benchmarks or example methods with configurable parameters and generates CSV output. This script is what gets executed by **run_all_benchmarks.sh**.
 
 The main features of this shell script are:
 - Supports both individual benchmark functions and example method names
