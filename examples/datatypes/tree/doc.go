@@ -24,7 +24,7 @@
 // operations for search, insertion, and deletion. Includes balanced construction
 // from sorted arrays and inorder traversal.
 //
-//	// Create a balanced BST from sorted values
+//	// Create a balanced BST from sorted values.
 //	values := []int{1, 2, 3, 4, 5, 6, 7}
 //	root := BuildBST(values)
 //
