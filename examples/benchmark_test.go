@@ -17,12 +17,17 @@ package examples
 import (
 	"flag"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"testing"
 
 	"github.com/rsned/bigo"
 	"github.com/rsned/bigo/examples/constant"
+	"github.com/rsned/bigo/examples/datatypes/collection"
+	"github.com/rsned/bigo/examples/datatypes/tree"
+	"github.com/rsned/bigo/examples/linear"
+	"github.com/rsned/bigo/examples/loglog"
 )
 
 // These values are small enough for everything below exponential to run if not overridden.
@@ -56,7 +61,7 @@ var (
 var (
 	// Constant benchmark variables
 	bmConstantHashTableLookupMap map[int]int
-	bmConstantLinkedList         *constant.LinkedList
+	bmConstantLinkedList         *collection.LinkedList[int]
 	bmConstantStack              *constant.DynamicStack
 	bmConstantQueue              *constant.Queue
 
@@ -69,9 +74,10 @@ var (
 
 		// Polylogarithmic benchmark variables
 		bmPolylogarithmicRangeTree *polylogarithmic.RangeTree2D
-
-		// Linear benchmark variables
-
+	*/
+	// Linear benchmark variables
+	bmLinearBST *tree.BSTNode
+	/*
 		// NLog*N benchmark variables
 
 		// Linearithmic benchmark variables
@@ -156,11 +162,17 @@ type BenchmarkSettings struct {
 	// Setup is a function that is called before the main benchmark loops
 	// starts running. Use this to build trees, load hash maps, reset or init
 	// any other data structures that need to be created before the benchmark.
+	//
+	// This function does NOT need to include calls to
+	// StopTimer/StartTimer/ResetTimer as the benchmark runner handles that.
 	Setup func(b *testing.B, n int, vals []int)
 
 	// Cleanup is a function that is called after the main benchmark loops
 	// has finished running. Use this to clean up any data structures that
 	// were created before the benchmark.
+	//
+	// This function does NOT need to include calls to
+	// StopTimer/StartTimer/ResetTimer as the benchmark runner handles that.
 	Cleanup func(b *testing.B)
 
 	// TODO(rsned): Add Best/Avg/Worst case identifiers to enable testing the
@@ -198,7 +210,6 @@ var (
 				for _, v := range vals[:n] {
 					bmConstantHashTableLookupMap[v] = v
 				}
-				b.ResetTimer()
 			},
 			Cleanup: func(_ *testing.B) {
 				bmConstantHashTableLookupMap = nil
@@ -247,22 +258,13 @@ var (
 		"LinkedListAccessFirst": {
 			ExpectedBigO: bigo.Constant,
 			Sorted:       false,
-			Runner:       func(_ int, _ []int) { _, _ = bmConstantLinkedList.GetFirstElement() },
+			Runner:       func(_ int, _ []int) { _, _ = bmConstantLinkedList.Front() },
 			Start:        100000,
 			End:          1000000,
 			Step:         100000,
 			Setup: func(b *testing.B, n int, vals []int) {
 				b.Helper()
-				head := constant.NewListNode(vals[0])
-				current := head
-				for i := 1; i < n; i++ {
-					current.Next = constant.NewListNode(vals[i])
-					current = current.Next
-				}
-				tail := current
-				bmConstantLinkedList = &constant.LinkedList{Head: head, Tail: tail}
-
-				b.ResetTimer()
+				bmConstantLinkedList = collection.FromSlice(vals[:n])
 			},
 			Cleanup: func(_ *testing.B) {
 				bmConstantLinkedList = nil
@@ -271,22 +273,13 @@ var (
 		"LinkedListAccessLast": {
 			ExpectedBigO: bigo.Constant,
 			Sorted:       false,
-			Runner:       func(_ int, _ []int) { _, _ = bmConstantLinkedList.GetLastElement() },
+			Runner:       func(_ int, _ []int) { _, _ = bmConstantLinkedList.Back() },
 			Start:        100000,
 			End:          1000000,
 			Step:         100000,
 			Setup: func(b *testing.B, n int, vals []int) {
 				b.Helper()
-				head := constant.NewListNode(vals[0])
-				current := head
-				for i := 1; i < n; i++ {
-					current.Next = constant.NewListNode(vals[i])
-					current = current.Next
-				}
-				tail := current
-				bmConstantLinkedList = &constant.LinkedList{Head: head, Tail: tail}
-
-				b.ResetTimer()
+				bmConstantLinkedList = collection.FromSlice(vals[:n])
 			},
 			Cleanup: func(_ *testing.B) {
 				bmConstantLinkedList = nil
@@ -299,13 +292,9 @@ var (
 			Start:        100000,
 			End:          1000000,
 			Step:         100000,
-			Setup: func(b *testing.B, n int, vals []int) {
+			Setup: func(b *testing.B, _ int, _ []int) {
 				b.Helper()
 				bmConstantStack = &constant.DynamicStack{}
-				for _, v := range vals[:n] {
-					bmConstantStack.Push(v)
-				}
-				b.ResetTimer()
 			},
 			Cleanup: func(_ *testing.B) {
 				bmConstantStack = nil
@@ -324,7 +313,6 @@ var (
 				for _, v := range vals[:n] {
 					bmConstantStack.Push(v)
 				}
-				b.ResetTimer()
 			},
 			Cleanup: func(_ *testing.B) {
 				bmConstantStack = nil
@@ -340,7 +328,6 @@ var (
 			Setup: func(b *testing.B, _ int, _ []int) {
 				b.Helper()
 				bmConstantQueue = &constant.Queue{}
-				b.ResetTimer()
 			},
 			Cleanup: func(_ *testing.B) {
 				bmConstantQueue = nil
@@ -573,105 +560,103 @@ var (
 
 	// linearTimeBenchmarks contains O(n) benchmarks
 	linearTimeBenchmarks = map[string]BenchmarkSettings{
-		/*
-			"Search": {
-				ExpectedBigO: bigo.Linear,
-				Sorted:       false,
-				// Search for hopefully non-existent value to force worst-case O(n)
-				Runner:  func(n int, vals []int) { _ = linear.Search(vals[:n], math.MaxInt) },
-				Start:   10000,
-				End:     100000,
-				Step:    10000,
-				Setup:   nil,
-				Cleanup: nil,
+		"Search": {
+			ExpectedBigO: bigo.Linear,
+			Sorted:       false,
+			// Search for hopefully non-existent value to force worst-case O(n)
+			Runner:  func(n int, vals []int) { _ = linear.Search(vals[:n], math.MaxInt) },
+			Start:   10000,
+			End:     100000,
+			Step:    10000,
+			Setup:   nil,
+			Cleanup: nil,
+		},
+		"ArrayTraversal": {
+			ExpectedBigO: bigo.Linear,
+			Sorted:       false,
+			Runner: func(n int, vals []int) {
+				// Use in-place traversal to avoid memory allocation overhead
+				for i, val := range vals[:n] {
+					vals[i] = val * 2
+				}
 			},
-			"ArrayTraversal": {
-				ExpectedBigO: bigo.Linear,
-				Sorted:       false,
-				Runner: func(n int, vals []int) {
-					// Use in-place traversal to avoid memory allocation overhead
-					for i, val := range vals[:n] {
-						vals[i] = val * 2
-					}
-				},
-				Start:   10000,
-				End:     100000,
-				Step:    10000,
-				Setup:   nil,
-				Cleanup: nil,
+			Start:   10000,
+			End:     100000,
+			Step:    10000,
+			Setup:   nil,
+			Cleanup: nil,
+		},
+		"CountElements": {
+			ExpectedBigO: bigo.Linear,
+			Sorted:       false,
+			Runner:       func(n int, vals []int) { _ = linear.CountElements(vals[:n]) },
+			Start:        10000,
+			End:          100000,
+			Step:         10000,
+			Setup:        nil,
+			Cleanup:      nil,
+		},
+		"FindMinimum": {
+			ExpectedBigO: bigo.Linear,
+			Sorted:       false,
+			Runner:       func(n int, vals []int) { _, _ = linear.FindMinimum(vals[:n]) },
+			Start:        10000,
+			End:          100000,
+			Step:         10000,
+			Setup:        nil,
+			Cleanup:      nil,
+		},
+		"FindMaximum": {
+			ExpectedBigO: bigo.Linear,
+			Sorted:       false,
+			Runner:       func(n int, vals []int) { _, _ = linear.FindMaximum(vals[:n]) },
+			Start:        10000,
+			End:          100000,
+			Step:         10000,
+			Setup:        nil,
+			Cleanup:      nil,
+		},
+		"CalculateSum": {
+			ExpectedBigO: bigo.Linear,
+			Sorted:       false,
+			Runner:       func(n int, vals []int) { _ = linear.CalculateSum(vals[:n]) },
+			Start:        10000,
+			End:          100000,
+			Step:         10000,
+			Setup:        nil,
+			Cleanup:      nil,
+		},
+		"FindTreeHeight": {
+			// FindTreeHeight visits all nodes, so it's O(n) not O(log n)
+			ExpectedBigO: bigo.Linear,
+			Sorted:       false,
+			Runner: func(_ int, _ []int) {
+				// TODO(rsned): Move from logarithmic to linear package.
+				_ = linear.FindTreeHeight(bmLinearBST)
 			},
-			"CountElements": {
-				ExpectedBigO: bigo.Linear,
-				Sorted:       false,
-				Runner:       func(n int, vals []int) { _ = linear.CountElements(vals[:n]) },
-				Start:        10000,
-				End:          100000,
-				Step:         10000,
-				Setup:        nil,
-				Cleanup:      nil,
+			Start: 1000,
+			End:   10000,
+			Step:  1000,
+			Setup: func(b *testing.B, n int, vals []int) {
+				b.Helper()
+				b.StopTimer()
+				bmLinearBST = tree.BuildBST(vals[:n])
+				b.StartTimer()
 			},
-			"FindMinimum": {
-				ExpectedBigO: bigo.Linear,
-				Sorted:       false,
-				Runner:       func(n int, vals []int) { _, _ = linear.FindMinimum(vals[:n]) },
-				Start:        10000,
-				End:          100000,
-				Step:         10000,
-				Setup:        nil,
-				Cleanup:      nil,
+			Cleanup: func(_ *testing.B) {
+				bmLinearBST = nil
 			},
-			"FindMaximum": {
-				ExpectedBigO: bigo.Linear,
-				Sorted:       false,
-				Runner:       func(n int, vals []int) { _, _ = linear.FindMaximum(vals[:n]) },
-				Start:        10000,
-				End:          100000,
-				Step:         10000,
-				Setup:        nil,
-				Cleanup:      nil,
-			},
-			"CalculateSum": {
-				ExpectedBigO: bigo.Linear,
-				Sorted:       false,
-				Runner:       func(n int, vals []int) { _ = linear.CalculateSum(vals[:n]) },
-				Start:        10000,
-				End:          100000,
-				Step:         10000,
-				Setup:        nil,
-				Cleanup:      nil,
-			},
-			"FindTreeHeight": {
-				// FindTreeHeight visits all nodes, so it's O(n) not O(log n)
-				ExpectedBigO: bigo.Linear,
-				Sorted:       false,
-				Runner: func(_ int, _ []int) {
-					// TODO(rsned): Move from logarithmic to linear package.
-					_ = logarithmic.FindTreeHeight(bmLogarithmicBST)
-				},
-				Start: 1000,
-				End:   10000,
-				Step:  1000,
-				Setup: func(b *testing.B, n int, vals []int) {
-					b.Helper()
-					b.StopTimer()
-					bmLogarithmicBST = logarithmic.BuildBST(vals[:n])
-					b.StartTimer()
-				},
-				Cleanup: func(_ *testing.B) {
-					bmLogarithmicBST = nil
-				},
-			},
-			"ParallelDivideConquer": {
-				ExpectedBigO: bigo.Linear,
-				Sorted:       false,
-				Runner:       func(n int, vals []int) { _ = loglog.ParallelDivideConquer(vals[:n]) },
-				Start:        10000,
-				End:          100000,
-				Step:         10000,
-				Setup:        nil,
-				Cleanup:      nil,
-			},
-		*/
+		},
+		"ParallelDivideConquer": {
+			ExpectedBigO: bigo.Linear,
+			Sorted:       false,
+			Runner:       func(n int, vals []int) { _ = loglog.ParallelDivideConquer(vals[:n]) },
+			Start:        10000,
+			End:          100000,
+			Step:         10000,
+			Setup:        nil,
+			Cleanup:      nil,
+		},
 	}
 
 	// nLogStarNTimeBenchmarks contains O(n log*(n)) benchmarks
@@ -1858,10 +1843,12 @@ func runOneBenchmark(b *testing.B, name string, settings BenchmarkSettings) {
 			vals = testIntVals[:n]
 		}
 
-		b.Run(fmt.Sprintf("%s-%07d", name, n),
+		b.Run(fmt.Sprintf("%s_n=%d", name, n),
 			func(b *testing.B) {
 				if settings.Setup != nil {
+					b.StopTimer()
 					settings.Setup(b, n, vals)
+					b.StartTimer()
 				}
 				for b.Loop() {
 					settings.Runner(n, vals)
