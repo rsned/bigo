@@ -175,15 +175,23 @@ BEGIN {
     benchmark_name = fields[1]
     
     # Extract n value from benchmark name
-    # Format: BenchmarkExampleMethod/MethodName-N-8 or BenchmarkName-N-8
-    # Look for pattern: -digits-digits at the end
-    if (match(benchmark_name, /-([0-9]+)-[0-9]+$/)) {
-        # Extract the first set of digits (the N value)
-        n = substr(benchmark_name, RSTART+1, RLENGTH-3)
-        # Remove the trailing "-digits" part
-        gsub(/-[0-9]+$/, "", n)
-    } else if (match(benchmark_name, /-([0-9]+)$/)) {
-        n = substr(benchmark_name, RSTART+1, RLENGTH-1)
+    # Format: BenchmarkExampleMethod/MethodName_n=100-8 or BenchmarkName_n=100-8
+    # Look for pattern: _n=digits-digits at the end
+    if (match(benchmark_name, /_n=([0-9]+)-[0-9]+$/)) {
+        # Extract the n value (digits after _n=)
+        n_match = substr(benchmark_name, RSTART, RLENGTH)
+        if (match(n_match, /=([0-9]+)/)) {
+            n = substr(n_match, RSTART+1, RLENGTH-1)
+        } else {
+            n = "unknown"
+        }
+    } else if (match(benchmark_name, /_n=([0-9]+)$/)) {
+        n_match = substr(benchmark_name, RSTART, RLENGTH)
+        if (match(n_match, /=([0-9]+)/)) {
+            n = substr(n_match, RSTART+1, RLENGTH-1)
+        } else {
+            n = "unknown"
+        }
     } else {
         n = "unknown"
     }

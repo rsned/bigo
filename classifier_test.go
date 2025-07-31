@@ -776,8 +776,12 @@ func TestAddBenchmarkResult(t *testing.T) {
 		{
 			name: "valid benchmark result",
 			benchResult: testing.BenchmarkResult{
-				N: 1000,
-				T: 5000 * time.Nanosecond, // 5000ns total, so 5ns per op
+				N:         1000,
+				T:         5000 * time.Nanosecond, // 5000ns total, so 5ns per op
+				Bytes:     0,
+				MemAllocs: 0,
+				MemBytes:  0,
+				Extra:     nil,
 			},
 			expectedN:      1000,
 			expectedValue:  5.0,
@@ -787,8 +791,12 @@ func TestAddBenchmarkResult(t *testing.T) {
 		{
 			name: "benchmark with zero iterations",
 			benchResult: testing.BenchmarkResult{
-				N: 0,
-				T: 1000 * time.Nanosecond,
+				N:         0,
+				T:         1000 * time.Nanosecond,
+				Bytes:     0,
+				MemAllocs: 0,
+				MemBytes:  0,
+				Extra:     nil,
 			},
 			expectedN:      0,
 			expectedValue:  0,
@@ -798,8 +806,12 @@ func TestAddBenchmarkResult(t *testing.T) {
 		{
 			name: "benchmark with negative iterations",
 			benchResult: testing.BenchmarkResult{
-				N: -100,
-				T: 1000 * time.Nanosecond,
+				N:         -100,
+				T:         1000 * time.Nanosecond,
+				Bytes:     0,
+				MemAllocs: 0,
+				MemBytes:  0,
+				Extra:     nil,
 			},
 			expectedN:      -100,
 			expectedValue:  0,
@@ -809,8 +821,12 @@ func TestAddBenchmarkResult(t *testing.T) {
 		{
 			name: "benchmark with very fast operation",
 			benchResult: testing.BenchmarkResult{
-				N: 1000000,
-				T: 1 * time.Nanosecond, // 1ns total, so 0.000001ns per op
+				N:         1000000,
+				T:         1 * time.Nanosecond, // 1ns total, so 0.000001ns per op
+				Bytes:     0,
+				MemAllocs: 0,
+				MemBytes:  0,
+				Extra:     nil,
 			},
 			expectedN:      1000000,
 			expectedValue:  0.000001,
@@ -820,8 +836,12 @@ func TestAddBenchmarkResult(t *testing.T) {
 		{
 			name: "benchmark with slow operation",
 			benchResult: testing.BenchmarkResult{
-				N: 10,
-				T: 10 * time.Second, // Very slow: 1 billion ns per op
+				N:         10,
+				T:         10 * time.Second, // Very slow: 1 billion ns per op
+				Bytes:     0,
+				MemAllocs: 0,
+				MemBytes:  0,
+				Extra:     nil,
 			},
 			expectedN:      10,
 			expectedValue:  1000000000.0,
@@ -833,8 +853,10 @@ func TestAddBenchmarkResult(t *testing.T) {
 			benchResult: testing.BenchmarkResult{
 				N:         500,
 				T:         2500 * time.Nanosecond, // 5ns per op
-				MemAllocs: 1000,                   // Should be ignored
-				MemBytes:  50000,                  // Should be ignored
+				Bytes:     0,
+				MemAllocs: 1000,  // Should be ignored
+				MemBytes:  50000, // Should be ignored
+				Extra:     nil,
 			},
 			expectedN:      500,
 			expectedValue:  5.0,
@@ -853,17 +875,20 @@ func TestAddBenchmarkResult(t *testing.T) {
 				if err == nil {
 					t.Errorf("expected error but got none")
 				}
+
 				return
 			}
 
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
+
 				return
 			}
 
 			// Check that the correct number of data points were added
 			if len(classifier.data) != tt.expectedPoints {
 				t.Errorf("expected %d data points, got %d", tt.expectedPoints, len(classifier.data))
+
 				return
 			}
 
@@ -872,11 +897,13 @@ func TestAddBenchmarkResult(t *testing.T) {
 				values, exists := classifier.data[tt.expectedN]
 				if !exists {
 					t.Errorf("expected data point with N=%d not found", tt.expectedN)
+
 					return
 				}
 
 				if len(values) != 1 {
 					t.Errorf("expected 1 value for N=%d, got %d", tt.expectedN, len(values))
+
 					return
 				}
 
@@ -893,17 +920,18 @@ func TestClassifierAddBenchmarkResultMultipleResults(t *testing.T) {
 
 	// Add multiple benchmark results with slight variation to avoid zero variance
 	results := []testing.BenchmarkResult{
-		{N: 100, T: 500 * time.Nanosecond},   // 5.0ns per op
-		{N: 200, T: 1020 * time.Nanosecond},  // 5.1ns per op
-		{N: 400, T: 1960 * time.Nanosecond},  // 4.9ns per op
-		{N: 800, T: 4040 * time.Nanosecond},  // 5.05ns per op
-		{N: 1600, T: 7920 * time.Nanosecond}, // 4.95ns per op
+		{N: 100, T: 500 * time.Nanosecond, Bytes: 0, MemAllocs: 0, MemBytes: 0, Extra: nil},   // 5.0ns per op
+		{N: 200, T: 1020 * time.Nanosecond, Bytes: 0, MemAllocs: 0, MemBytes: 0, Extra: nil},  // 5.1ns per op
+		{N: 400, T: 1960 * time.Nanosecond, Bytes: 0, MemAllocs: 0, MemBytes: 0, Extra: nil},  // 4.9ns per op
+		{N: 800, T: 4040 * time.Nanosecond, Bytes: 0, MemAllocs: 0, MemBytes: 0, Extra: nil},  // 5.05ns per op
+		{N: 1600, T: 7920 * time.Nanosecond, Bytes: 0, MemAllocs: 0, MemBytes: 0, Extra: nil}, // 4.95ns per op
 	}
 
 	for _, result := range results {
 		err := classifier.AddBenchmarkResult(result)
 		if err != nil {
 			t.Errorf("unexpected error adding benchmark result: %v", err)
+
 			return
 		}
 	}
@@ -911,6 +939,7 @@ func TestClassifierAddBenchmarkResultMultipleResults(t *testing.T) {
 	// Verify all data points were added
 	if len(classifier.data) != 5 {
 		t.Errorf("expected 5 data points, got %d", len(classifier.data))
+
 		return
 	}
 
@@ -927,6 +956,7 @@ func TestClassifierAddBenchmarkResultMultipleResults(t *testing.T) {
 		actualValues, exists := classifier.data[n]
 		if !exists {
 			t.Errorf("expected data point with N=%d not found", n)
+
 			continue
 		}
 
@@ -939,6 +969,7 @@ func TestClassifierAddBenchmarkResultMultipleResults(t *testing.T) {
 	rating, err := classifier.Classify()
 	if err != nil {
 		t.Errorf("classification failed: %v", err)
+
 		return
 	}
 
@@ -956,6 +987,7 @@ func TestClassifierAddBenchmarkResultIntegrationWithRealBenchmark(t *testing.T) 
 		for _, v := range arr {
 			sum += v
 		}
+
 		return sum
 	}
 
@@ -971,7 +1003,8 @@ func TestClassifierAddBenchmarkResultIntegrationWithRealBenchmark(t *testing.T) 
 
 		// Run a benchmark that processes the full array each time
 		result := testing.Benchmark(func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			b.Helper()
+			for b.Loop() {
 				_ = linearFunc(testData)
 			}
 		})
@@ -980,14 +1013,19 @@ func TestClassifierAddBenchmarkResultIntegrationWithRealBenchmark(t *testing.T) 
 		// In real usage, you'd run the benchmark with different problem sizes
 		// and collect the results appropriately
 		fakeResult := testing.BenchmarkResult{
-			N: size,     // Use problem size as N
-			T: result.T, // Use actual timing
+			N:         size,     // Use problem size as N
+			T:         result.T, // Use actual timing
+			Bytes:     0,
+			MemAllocs: 0,
+			MemBytes:  0,
+			Extra:     nil,
 		}
 
 		// Add the benchmark result to our classifier
 		err := classifier.AddBenchmarkResult(fakeResult)
 		if err != nil {
 			t.Errorf("failed to add benchmark result for size %d: %v", size, err)
+
 			continue
 		}
 	}
@@ -1002,11 +1040,13 @@ func TestClassifierAddBenchmarkResultIntegrationWithRealBenchmark(t *testing.T) 
 	rating, err := classifier.Classify()
 	if err != nil {
 		t.Errorf("classification failed: %v", err)
+
 		return
 	}
 
 	if rating == nil {
 		t.Errorf("got nil rating")
+
 		return
 	}
 
@@ -1021,13 +1061,18 @@ func TestAddBenchmarkResult_ZeroDurationHandling(t *testing.T) {
 
 	// Test with zero duration (could happen with very fast operations)
 	result := testing.BenchmarkResult{
-		N: 1000,
-		T: 0, // Zero duration
+		N:         1000,
+		T:         0, // Zero duration
+		Bytes:     0,
+		MemAllocs: 0,
+		MemBytes:  0,
+		Extra:     nil,
 	}
 
 	err := classifier.AddBenchmarkResult(result)
 	if err != nil {
 		t.Errorf("unexpected error with zero duration: %v", err)
+
 		return
 	}
 
@@ -1035,6 +1080,7 @@ func TestAddBenchmarkResult_ZeroDurationHandling(t *testing.T) {
 	values, exists := classifier.data[1000]
 	if !exists {
 		t.Errorf("expected data point not found")
+
 		return
 	}
 
@@ -1073,6 +1119,7 @@ func TestClassifierGetAllRatings(t *testing.T) {
 				_ = c.AddDataPoint(800, 800.0)
 				_ = c.AddDataPoint(1600, 1600.0)
 				_, err := c.Classify()
+
 				return err
 			},
 			expectNil:        false,
@@ -1088,6 +1135,7 @@ func TestClassifierGetAllRatings(t *testing.T) {
 				_ = c.AddDataPoint(800, 1.0)
 				_ = c.AddDataPoint(1600, 1.2)
 				_, err := c.Classify()
+
 				return err
 			},
 			expectNil:        false,
@@ -1103,6 +1151,7 @@ func TestClassifierGetAllRatings(t *testing.T) {
 				_ = c.AddDataPoint(40, 1600.0)
 				_ = c.AddDataPoint(50, 2500.0)
 				_, err := c.Classify()
+
 				return err
 			},
 			expectNil:        false,
@@ -1125,6 +1174,7 @@ func TestClassifierGetAllRatings(t *testing.T) {
 				_ = c.AddDataPoint(800, 800.0)
 				_ = c.AddDataPoint(1600, 1600.0)
 				_, err = c.Classify()
+
 				return err
 			},
 			expectNil:        false,
@@ -1141,6 +1191,7 @@ func TestClassifierGetAllRatings(t *testing.T) {
 				_ = c.AddDataPoint(8000, 8000.0)
 				_ = c.AddDataPoint(16000, 16000.0)
 				_, err := c.Classify()
+
 				return err
 			},
 			expectNil:        false,
@@ -1156,6 +1207,7 @@ func TestClassifierGetAllRatings(t *testing.T) {
 			err := tt.setupData(c)
 			if err != nil {
 				t.Errorf("failed to setup test data: %v", err)
+
 				return
 			}
 
@@ -1165,11 +1217,13 @@ func TestClassifierGetAllRatings(t *testing.T) {
 				if ratings != nil {
 					t.Errorf("expected nil ratings but got %d ratings", len(ratings))
 				}
+
 				return
 			}
 
 			if ratings == nil {
 				t.Errorf("expected ratings but got nil")
+
 				return
 			}
 
@@ -1179,6 +1233,7 @@ func TestClassifierGetAllRatings(t *testing.T) {
 
 			if len(ratings) == 0 {
 				t.Errorf("expected at least some ratings but got empty slice")
+
 				return
 			}
 
@@ -1186,6 +1241,7 @@ func TestClassifierGetAllRatings(t *testing.T) {
 			for i, rating := range ratings {
 				if rating == nil {
 					t.Errorf("rating %d is nil", i)
+
 					continue
 				}
 				if rating.bigO == nil {
@@ -1201,6 +1257,7 @@ func TestClassifierGetAllRatings(t *testing.T) {
 						t.Errorf("ratings not sorted by rank: rating %d (%s, rank %d) > rating %d (%s, rank %d)",
 							i-1, ratings[i-1].bigO.label, ratings[i-1].bigO.rank,
 							i, ratings[i].bigO.label, ratings[i].bigO.rank)
+
 						break
 					}
 				}
@@ -1241,12 +1298,14 @@ func TestClassifierGetAllRatingsConsistencyWithClassify(t *testing.T) {
 	topRating, err := c.Classify()
 	if err != nil {
 		t.Errorf("classification failed: %v", err)
+
 		return
 	}
 
 	allRatings := c.GetAllRatings()
 	if allRatings == nil {
 		t.Errorf("GetAllRatings returned nil after successful classification")
+
 		return
 	}
 
@@ -1255,6 +1314,7 @@ func TestClassifierGetAllRatingsConsistencyWithClassify(t *testing.T) {
 	for _, rating := range allRatings {
 		if rating.bigO == topRating.bigO && rating.score == topRating.score {
 			foundTopRating = true
+
 			break
 		}
 	}
@@ -1270,6 +1330,7 @@ func TestClassifierGetAllRatingsConsistencyWithClassify(t *testing.T) {
 	for _, rating := range allRatings {
 		if rating.score == bestScore {
 			foundBestScore = true
+
 			break
 		}
 	}
@@ -1293,6 +1354,7 @@ func TestClassifierGetAllRatingsEmptyAfterReset(t *testing.T) {
 	_, err := c.Classify()
 	if err != nil {
 		t.Errorf("classification failed: %v", err)
+
 		return
 	}
 
@@ -1300,6 +1362,7 @@ func TestClassifierGetAllRatingsEmptyAfterReset(t *testing.T) {
 	ratingsBeforeReset := c.GetAllRatings()
 	if len(ratingsBeforeReset) == 0 {
 		t.Errorf("expected ratings before reset")
+
 		return
 	}
 
@@ -1326,6 +1389,7 @@ func TestClassifierGetAllRatingsReturnsCopy(t *testing.T) {
 	_, err := c.Classify()
 	if err != nil {
 		t.Errorf("classification failed: %v", err)
+
 		return
 	}
 
@@ -1335,6 +1399,7 @@ func TestClassifierGetAllRatingsReturnsCopy(t *testing.T) {
 
 	if len(ratings1) == 0 || len(ratings2) == 0 {
 		t.Errorf("expected ratings from both calls")
+
 		return
 	}
 
@@ -1396,6 +1461,7 @@ func TestClassifierGetAllRatingsReClassificationReplacesRatings(t *testing.T) {
 	_, err := c.Classify()
 	if err != nil {
 		t.Errorf("first classification failed: %v", err)
+
 		return
 	}
 
@@ -1403,6 +1469,7 @@ func TestClassifierGetAllRatingsReClassificationReplacesRatings(t *testing.T) {
 	firstCount := len(ratingsAfterFirst)
 	if firstCount == 0 {
 		t.Errorf("expected ratings after first classification")
+
 		return
 	}
 
@@ -1413,6 +1480,7 @@ func TestClassifierGetAllRatingsReClassificationReplacesRatings(t *testing.T) {
 	_, err = c.Classify()
 	if err != nil {
 		t.Errorf("second classification failed: %v", err)
+
 		return
 	}
 

@@ -358,6 +358,7 @@ func (o *Classifier) GetAllRatings() []*Rating {
 	// Return a copy of the ratings slice to prevent external modification of internal state
 	ratingsCopy := make([]*Rating, len(o.ratings))
 	copy(ratingsCopy, o.ratings)
+
 	return ratingsCopy
 }
 
