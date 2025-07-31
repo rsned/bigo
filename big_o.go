@@ -81,6 +81,13 @@ type BigO struct {
 		funcTranformFloatBig   floatBigFunc
 		funcTranformBigBig     bigBigFunc
 	*/
+
+	// TODO(rsned): Add value range measures to help gauge how will the set
+	// of values will be affected by the BigO. e.g., For Linearithmic, it
+	// really needs 3-4 order of magnitude change in N to see the difference
+	// between O(n), O(log* n), and O(n log n) because within the same
+	// magnitude log* and log n are basically constants which makes them
+	// O(k*n) which reduces to O(n) and you can't tell the apart.
 }
 
 // Label returns the label of this BigO.

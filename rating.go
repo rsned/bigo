@@ -27,6 +27,16 @@ func (r *Rating) String() string {
 	return fmt.Sprintf("%s: %0.3f", r.bigO.label, r.score)
 }
 
+// BigO returns the BigO instance associated with this rating.
+func (r *Rating) BigO() *BigO {
+	return r.bigO
+}
+
+// Score returns the correlation score for this rating.
+func (r *Rating) Score() float64 {
+	return r.score
+}
+
 // defaultRating is used when nothing has been processed yet.
 var defaultRating = &Rating{
 	bigO:  defaultBigO,
